@@ -21,12 +21,14 @@ class ScanResult:
     port = 0
     id = ''
     name = '<unknown>'
+    encryption_type = 'ECB'
 
-    def __init__(self, ip, port, id, name=''):
+    def __init__(self, ip, port, id, name='', encryption_type='ECB'):
         self.ip = ip
         self.port = port
         self.id = id
         self.name = name
+        self.encryption_type = encryption_type
 
 
 def send_data(ip, port, data):
@@ -91,14 +93,14 @@ def encrypt_generic(pack):
     return encrypt(pack, GENERIC_KEY)
 
 
-def create_CGM_cipher(key):
+def create_GCM_cipher(key):
     cipher = AES.new(bytes(key, 'utf-8'), AES.MODE_GCM, nonce=GCM_IV)
     cipher.update(GCM_ADD)
     return cipher
 
 
 def decrypt_GCM(pack_encoded, tag_encoded, key):
-    cipher = create_CGM_cipher(key)
+    cipher = create_GCM_cipher(key)
     base64decodedPack = base64.b64decode(pack_encoded)
     base64decodedTag = base64.b64decode(tag_encoded)
     decryptedPack = cipher.decrypt_and_verify(base64decodedPack, base64decodedTag)
@@ -111,7 +113,7 @@ def decrypt_GCM_generic(pack_encoded, tag_encoded):
 
 
 def encrypt_GCM(pack, key):
-    encrypted_data, tag = create_CGM_cipher(key).encrypt_and_digest(pack.encode("utf-8"))
+    encrypted_data, tag = create_GCM_cipher(key).encrypt_and_digest(pack.encode("utf-8"))
     encrypted_pack = base64.b64encode(encrypted_data).decode('utf-8')
     tag = base64.b64encode(tag).decode('utf-8')
     data = {
@@ -152,7 +154,12 @@ def search_devices():
 
             resp = json.loads(raw_json)
 
-            if ENCRYPTION_TYPE == 'GCM':
+            encryption_type = 'ECB'
+            if resp['tag']:
+                print('Setting the encryption to GCM because tag property is present in the responce')
+                encryption_type = 'GCM'
+
+            if encryption_type == 'GCM':
                 decrypted_pack = decrypt_GCM_generic(resp['pack'], resp['tag'])
             else:
                 decrypted_pack = decrypt_generic(resp['pack'])
@@ -162,7 +169,11 @@ def search_devices():
             cid = pack['cid'] if 'cid' in pack and len(pack['cid']) > 0 else \
                 resp['cid'] if 'cid' in resp else '<unknown-cid>'
 
-            results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>'))
+            if pack['bc'] and pack['bc'] == '00000000000000000000000000000000':
+                print('Set GCM encryption because bc value in search responce is 0')
+                encryption_type = 'GCM';
+
+            results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>', encryption_type))
 
             if args.verbose:
                 print(f'search_devices: pack={pack}')
@@ -177,10 +188,10 @@ def search_devices():
 
 
 def bind_device(search_result):
-    print('Binding device: %s (%s, ID: %s)' % (search_result.ip, search_result.name, search_result.id))
+    print('Binding device: %s (%s, ID: %s, encryption: %s)' % (search_result.ip, search_result.name, search_result.id, search_result.encryption_type))
 
     pack = '{"mac":"%s","t":"bind","uid":0}' % search_result.id
-    if ENCRYPTION_TYPE == 'GCM':
+    if search_result.encryption_type == 'GCM':
         pack_encrypted = encrypt_GCM_generic(pack)
     else:
         pack_encrypted = encrypt_generic(pack)
@@ -191,7 +202,7 @@ def bind_device(search_result):
     response = json.loads(result)
     if response["t"] == "pack":
 
-        if ENCRYPTION_TYPE == 'GCM':
+        if search_result.encryption_type == 'GCM':
             pack_decrypted = decrypt_GCM_generic(response["pack"], response["tag"])
         else:
             pack_decrypted = decrypt_generic(response["pack"])
