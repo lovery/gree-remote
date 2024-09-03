@@ -155,7 +155,7 @@ def search_devices():
             resp = json.loads(raw_json)
 
             encryption_type = 'ECB'
-            if resp['tag']:
+            if 'tag' in resp:
                 print('Setting the encryption to GCM because tag property is present in the responce')
                 encryption_type = 'GCM'
 
@@ -169,7 +169,7 @@ def search_devices():
             cid = pack['cid'] if 'cid' in pack and len(pack['cid']) > 0 else \
                 resp['cid'] if 'cid' in resp else '<unknown-cid>'
 
-            if pack['bc'] and pack['bc'] == '00000000000000000000000000000000':
+            if 'bc' in pack and pack['bc'] == '00000000000000000000000000000000':
                 print('Set GCM encryption because bc value in search responce is 0')
                 encryption_type = 'GCM';
 
