@@ -1,6 +1,7 @@
 import argparse
 import base64
 import sys
+import re
 
 from Crypto.Cipher import AES
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -169,9 +170,11 @@ def search_devices():
             cid = pack['cid'] if 'cid' in pack and len(pack['cid']) > 0 else \
                 resp['cid'] if 'cid' in resp else '<unknown-cid>'
 
-            if 'bc' in pack and pack['bc'] == '00000000000000000000000000000000':
-                print('Set GCM encryption because bc value in search responce is 0')
-                encryption_type = 'GCM';
+            if encryption_type != 'GCM' and 'ver' in pack:
+                ver = re.search(r'(?<=V)[0-9]+(?<=.)', pack['ver'])
+                if int(ver.group(0)) >= 2:
+                    print('Set GCM encryption because version in search responce is 2 or later')
+                    encryption_type = 'GCM';
 
             results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>', encryption_type))
 
@@ -197,7 +200,15 @@ def bind_device(search_result):
         pack_encrypted = encrypt_generic(pack)
 
     request = create_request(search_result.id, pack_encrypted, 1)
-    result = send_data(search_result.ip, 7000, bytes(request, encoding='utf-8'))
+    try:
+        result = send_data(search_result.ip, 7000, bytes(request, encoding='utf-8'))
+    except socket.timeout:
+        print('Device %s is not responding on bind request' % search_result.ip)
+        if search_result.encryption_type != 'GCM':
+            search_result.encryption_type = 'GCM'
+            bind_device(search_result)
+
+        return
 
     response = json.loads(result)
     if response["t"] == "pack":
