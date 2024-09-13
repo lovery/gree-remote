@@ -76,7 +76,7 @@ def create_GCM_cipher(key):
     return cipher
 
 
-def decrypt(pack_encoded, key):
+def decrypt_ECB(pack_encoded, key):
     decryptor = create_ECB_cipher(key).decryptor()
     pack_decoded = base64.b64decode(pack_encoded)
     pack_decrypted = decryptor.update(pack_decoded) + decryptor.finalize()
@@ -84,11 +84,11 @@ def decrypt(pack_encoded, key):
     return pack_unpadded.decode('utf-8')
 
 
-def decrypt_generic(pack_encoded):
+def decrypt_ECB_generic(pack_encoded):
     return decrypt(pack_encoded, GENERIC_KEY)
 
 
-def encrypt(pack, key):
+def encrypt_ECB(pack, key):
     encryptor = create_ECB_cipher(key).encryptor()
     pack_padded = add_pkcs7_padding(pack)
     pack_encrypted = encryptor.update(bytes(pack_padded, encoding='utf-8')) + encryptor.finalize()
@@ -96,7 +96,7 @@ def encrypt(pack, key):
     return pack_encoded.decode('utf-8')
 
 
-def encrypt_generic(pack):
+def encrypt_ECB_generic(pack):
     return encrypt(pack, GENERIC_KEY)
 
 
@@ -164,7 +164,7 @@ def search_devices():
             if encryption_type == 'GCM':
                 decrypted_pack = decrypt_GCM_generic(resp['pack'], resp['tag'])
             else:
-                decrypted_pack = decrypt_generic(resp['pack'])
+                decrypted_pack = decrypt_ECB_generic(resp['pack'])
 
             pack = json.loads(decrypted_pack)
 
@@ -198,7 +198,7 @@ def bind_device(search_result):
     if search_result.encryption_type == 'GCM':
         pack_encrypted = encrypt_GCM_generic(pack)
     else:
-        pack_encrypted = encrypt_generic(pack)
+        pack_encrypted = encrypt_ECB_generic(pack)
 
     request = create_request(search_result.id, pack_encrypted, 1)
     try:
@@ -221,7 +221,7 @@ def bind_device(search_result):
         if search_result.encryption_type == 'GCM':
             pack_decrypted = decrypt_GCM_generic(response["pack"], response["tag"])
         else:
-            pack_decrypted = decrypt_generic(response["pack"])
+            pack_decrypted = decrypt_ECB_generic(response["pack"])
 
         bind_resp = json.loads(pack_decrypted)
 
@@ -244,7 +244,7 @@ def get_param():
         data_encrypted = encrypt_GCM(pack, args.key)
         request += '"tag":"%s","pack":"%s"}' % (data_encrypted["tag"], data_encrypted["pack"])
     else:
-        pack_encrypted = encrypt(pack, args.key)
+        pack_encrypted = encrypt_ECB(pack, args.key)
         request += '"pack":"%s"}' % pack_encrypted
 
     result = send_data(args.client, 7000, bytes(request, encoding='utf-8'))
@@ -261,7 +261,7 @@ def get_param():
             tag = response["tag"]
             pack_decrypted = decrypt_GCM(pack, tag, args.key)
         else:
-            pack_decrypted = decrypt(pack, args.key)
+            pack_decrypted = decrypt_ECB(pack, args.key)
 
         pack_json = json.loads(pack_decrypted)
 
@@ -294,7 +294,7 @@ def set_param():
         data_encrypted = encrypt_GCM(pack, args.key)
         request += '"tag":"%s","pack":"%s"}' % (data_encrypted["tag"], data_encrypted["pack"])
     else:
-        pack_encrypted = encrypt(pack, args.key)
+        pack_encrypted = encrypt_ECB(pack, args.key)
         request += '"pack":"%s"}' % pack_encrypted
 
     result = send_data(args.client, 7000, bytes(request, encoding='utf-8'))
@@ -311,7 +311,7 @@ def set_param():
             tag = response["tag"]
             pack_decrypted = decrypt_GCM(pack, tag, args.key)
         else:
-            pack_decrypted = decrypt(pack, args.key)
+            pack_decrypted = decrypt_ECB(pack, args.key)
 
         pack_json = json.loads(pack_decrypted)
 
