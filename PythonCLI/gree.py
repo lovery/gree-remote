@@ -235,6 +235,7 @@ def bind_device(search_result):
 
 
 def get_param():
+    global ENCRYPTION_TYPE
     print(f'Getting parameters: {", ".join(args.params)}')
 
     cols = ','.join(f'"{i}"' for i in args.params)
@@ -250,8 +251,6 @@ def get_param():
         print(f'get_param: response={response}')
 
     if response["t"] == "pack":
-        pack = response["pack"]
-
         pack_decrypted = decrypt(response, args.key, ENCRYPTION_TYPE)
         pack_json = json.loads(pack_decrypted)
 
@@ -263,6 +262,7 @@ def get_param():
 
 
 def set_param():
+    global ENCRYPTION_TYPE
     kv_list = [i.split('=') for i in args.params]
     errors = [i for i in kv_list if len(i) != 2]
 
