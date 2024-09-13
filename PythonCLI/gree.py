@@ -84,20 +84,12 @@ def decrypt_ECB(pack_encoded, key):
     return pack_unpadded.decode('utf-8')
 
 
-def decrypt_ECB_generic(pack_encoded):
-    return decrypt(pack_encoded, GENERIC_KEY)
-
-
 def encrypt_ECB(pack, key):
     encryptor = create_ECB_cipher(key).encryptor()
     pack_padded = add_pkcs7_padding(pack)
     pack_encrypted = encryptor.update(bytes(pack_padded, encoding='utf-8')) + encryptor.finalize()
     pack_encoded = base64.b64encode(pack_encrypted)
     return pack_encoded.decode('utf-8')
-
-
-def encrypt_ECB_generic(pack):
-    return encrypt(pack, GENERIC_KEY)
 
 
 def decrypt_GCM(pack_encoded, tag_encoded, key):
@@ -109,8 +101,6 @@ def decrypt_GCM(pack_encoded, tag_encoded, key):
     return decodedPack
 
 
-def decrypt_GCM_generic(pack_encoded, tag_encoded):
-    return decrypt_GCM(pack_encoded, tag_encoded, GENERIC_GCM_KEY)
 
 
 def encrypt_GCM(pack, key):
@@ -122,10 +112,6 @@ def encrypt_GCM(pack, key):
         "tag": tag
     }
     return data
-
-
-def encrypt_GCM_generic(pack):
-    return encrypt_GCM(pack, GENERIC_GCM_KEY)
 
 
 def decrypt(resp, key, enc_type):
