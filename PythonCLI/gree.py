@@ -187,10 +187,34 @@ def search_devices():
                     print('Set GCM encryption because version in search responce is 2 or later')
                     encryption_type = 'GCM';
 
-            results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>', encryption_type))
+            if 'subCnt' in pack:
+                print('There are individual sub units - trying to get their mac/cid and keys')
 
-            if args.verbose:
-                print(f'search_devices: pack={pack}')
+                subList_pack = '{"mac":"%s"}' % cid
+                subList_pack_encrypted = encrypt_generic(subList_pack, encryption_type)
+
+                subList_res = send_data(address[0], address[1], bytes(create_request(cid, encrypted_pack, 1, 'subList'), encoding='utf-8'))
+                subList_resp = json.loads(subList_res)
+
+                print(f'SubList responce is {subList_resp}')
+
+                if 'list' in subList_resp:
+                    print(f'There is list property in the responce of subList request: {subList_resp["list"]}')
+                    for sub_unit in subList_resp['list']:
+                        print(f'in loop of list with itm {sub_unit}')
+                        if 'mac' in sub_unit:
+                            print(f'mac proprty present {sub_unit["mac"]}')
+                            results.append(ScanResult(address[0], address[1], sub_unit['mac'], sub_unit['mac'], encryption_type))
+                        else:
+                            print('missing mac property')
+                else:
+                    print('There isnt a list proprty in the responce of subList request')
+
+            else :
+                results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>', encryption_type))
+
+                if args.verbose:
+                    print(f'search_devices: pack={pack}')
 
         except socket.timeout:
             print(f'Search finished, found {len(results)} device(s)')
@@ -202,7 +226,7 @@ def search_devices():
 
 
 def bind_device(search_result):
-    print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id})')
+    print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id}, encryption: {search_result.encryption_type})')
 
     pack = '{"mac":"%s","t":"bind","uid":0}' % search_result.id
     pack_encrypted = encrypt_generic(pack, search_result.encryption_type)
@@ -211,7 +235,7 @@ def bind_device(search_result):
         result = send_data(search_result.ip, 7000, bytes(request, encoding='utf-8'))
     except socket.timeout:
         if args.verbose:
-            print(f'Device {search_result.ip} is not responding on bind request')
+            print(f'Device {search_result.ip} is not responding on bind request encryped with {search_result.encryption_type}')
 
         if search_result.encryption_type != 'GCM':
             search_result.encryption_type = 'GCM'
