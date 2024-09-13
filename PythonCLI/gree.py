@@ -45,8 +45,8 @@ def send_data(ip, port, data):
     return s.recv(1024)
 
 
-def create_request(tcid, pack_encrypted, i=0):
-    request = '{"cid":"app","i":' + str(i) + ',"t":"pack","uid":0,"tcid":"' + tcid + '",'
+def create_request(tcid, pack_encrypted, i=0, t="pack"):
+    request = '{"cid":"app","i":' + str(i) + ',"t":"' + t + '","uid":0,"tcid":"' + tcid + '",'
     if (isinstance(pack_encrypted, dict)):
         request += '"tag":"' + pack_encrypted["tag"] + '","pack":"' + pack_encrypted["pack"] + '"}'
     else:
@@ -239,13 +239,13 @@ def get_param():
     cols = ','.join(f'"{i}"' for i in args.params)
 
     pack = f'{{"cols":[{cols}],"mac":"{args.id}","t":"status"}}'
-    request = '{"cid":"app","i":0,"t":"pack","uid":0,"tcid":"%s",' % args.id
+    request = ''
     if ENCRYPTION_TYPE == 'GCM':
         data_encrypted = encrypt_GCM(pack, args.key)
-        request += '"tag":"%s","pack":"%s"}' % (data_encrypted["tag"], data_encrypted["pack"])
+        request = create_request(args.id, data_encrypted, 0, "pack")
     else:
         pack_encrypted = encrypt_ECB(pack, args.key)
-        request += '"pack":"%s"}' % pack_encrypted
+        request = create_request(args.id, pack_encrypted, 0, "pack")
 
     result = send_data(args.client, 7000, bytes(request, encoding='utf-8'))
 
@@ -288,14 +288,14 @@ def set_param():
     pack = f'{{"opt":[{opts}],"p":[{ps}],"t":"cmd"}}'
     print(pack)
 
-    request = '{"cid":"app","i":0,"t":"pack","tcid":"%s","uid":0,' % args.id
+    request = ''
 
     if ENCRYPTION_TYPE == 'GCM':
         data_encrypted = encrypt_GCM(pack, args.key)
-        request += '"tag":"%s","pack":"%s"}' % (data_encrypted["tag"], data_encrypted["pack"])
+        request = create_request(args.id, data_encrypted, 0, "pack")
     else:
         pack_encrypted = encrypt_ECB(pack, args.key)
-        request += '"pack":"%s"}' % pack_encrypted
+        request = create_request(args.id, pack_encrypted, 0, "pack")
 
     result = send_data(args.client, 7000, bytes(request, encoding='utf-8'))
 
