@@ -66,12 +66,12 @@ def add_pkcs7_padding(data):
     return padded
 
 
-def create_cipher(key):
+def create_ECB_cipher(key):
     return Cipher(algorithms.AES(key.encode('utf-8')), modes.ECB(), backend=default_backend())
 
 
 def decrypt(pack_encoded, key):
-    decryptor = create_cipher(key).decryptor()
+    decryptor = create_ECB_cipher(key).decryptor()
     pack_decoded = base64.b64decode(pack_encoded)
     pack_decrypted = decryptor.update(pack_decoded) + decryptor.finalize()
     pack_unpadded = pack_decrypted[0:pack_decrypted.rfind(b'}') + 1]
@@ -83,7 +83,7 @@ def decrypt_generic(pack_encoded):
 
 
 def encrypt(pack, key):
-    encryptor = create_cipher(key).encryptor()
+    encryptor = create_ECB_cipher(key).encryptor()
     pack_padded = add_pkcs7_padding(pack)
     pack_encrypted = encryptor.update(bytes(pack_padded, encoding='utf-8')) + encryptor.finalize()
     pack_encoded = base64.b64encode(pack_encrypted)
