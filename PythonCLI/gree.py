@@ -129,7 +129,7 @@ def encrypt_GCM_generic(pack):
 
 
 def search_devices():
-    print('Searching for devices using broadcast address: %s' % args.broadcast)
+    print(f'Searching for devices using broadcast address: {args.broadcast}')
 
     s = socket.socket(type=socket.SOCK_DGRAM, proto=socket.IPPROTO_UDP)
     s.settimeout(5)
@@ -157,8 +157,9 @@ def search_devices():
 
             encryption_type = 'ECB'
             if 'tag' in resp:
-                print('Setting the encryption to GCM because tag property is present in the responce')
                 encryption_type = 'GCM'
+                if args.verbose:
+                    print('Setting the encryption to GCM because tag property is present in the responce')
 
             if encryption_type == 'GCM':
                 decrypted_pack = decrypt_GCM_generic(resp['pack'], resp['tag'])
@@ -182,7 +183,7 @@ def search_devices():
                 print(f'search_devices: pack={pack}')
 
         except socket.timeout:
-            print('Search finished, found %d device(s)' % len(results))
+            print(f'Search finished, found {len(results)} device(s)')
             break
 
     if len(results) > 0:
@@ -191,7 +192,7 @@ def search_devices():
 
 
 def bind_device(search_result):
-    print('Binding device: %s (%s, ID: %s, encryption: %s)' % (search_result.ip, search_result.name, search_result.id, search_result.encryption_type))
+    print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id})')
 
     pack = '{"mac":"%s","t":"bind","uid":0}' % search_result.id
     if search_result.encryption_type == 'GCM':
@@ -203,9 +204,13 @@ def bind_device(search_result):
     try:
         result = send_data(search_result.ip, 7000, bytes(request, encoding='utf-8'))
     except socket.timeout:
-        print('Device %s is not responding on bind request' % search_result.ip)
+        if args.verbose:
+            print(f'Device {search_result.ip} is not responding on bind request')
+
         if search_result.encryption_type != 'GCM':
             search_result.encryption_type = 'GCM'
+            if args.verbose:
+                print(f'Device {search_result.ip} change encryption to "GCM" and try to bind again')
             bind_device(search_result)
 
         return
@@ -225,7 +230,7 @@ def bind_device(search_result):
 
         if 't' in bind_resp and bind_resp["t"].lower() == "bindok":
             key = bind_resp['key']
-            print('Bind to %s succeeded, key = %s' % (search_result.id, key))
+            print(f'Bind to {search_result.id} succeeded, key = {key}')
 
 
 def get_param():
@@ -261,10 +266,10 @@ def get_param():
         pack_json = json.loads(pack_decrypted)
 
         if args.verbose:
-            print(f'get_param: pack={pack}, json={pack_json}')
+            print(f'get_param: pack={response["pack"]}, json={pack_json}')
 
         for col, dat in zip(pack_json['cols'], pack_json['dat']):
-            print('%s = %s' % (col, dat))
+            print(f'{col} = {dat}')
 
 
 def set_param():
@@ -358,5 +363,5 @@ if __name__ == '__main__':
             exit(1)
         set_param()
     else:
-        print('Error: unknown command "%s"' % args.command)
+        print(f'Error: unknown command "{args.command}"')
         exit(1)
