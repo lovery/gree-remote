@@ -70,6 +70,12 @@ def create_ECB_cipher(key):
     return Cipher(algorithms.AES(key.encode('utf-8')), modes.ECB(), backend=default_backend())
 
 
+def create_GCM_cipher(key):
+    cipher = AES.new(bytes(key, 'utf-8'), AES.MODE_GCM, nonce=GCM_IV)
+    cipher.update(GCM_ADD)
+    return cipher
+
+
 def decrypt(pack_encoded, key):
     decryptor = create_ECB_cipher(key).decryptor()
     pack_decoded = base64.b64decode(pack_encoded)
@@ -92,12 +98,6 @@ def encrypt(pack, key):
 
 def encrypt_generic(pack):
     return encrypt(pack, GENERIC_KEY)
-
-
-def create_GCM_cipher(key):
-    cipher = AES.new(bytes(key, 'utf-8'), AES.MODE_GCM, nonce=GCM_IV)
-    cipher.update(GCM_ADD)
-    return cipher
 
 
 def decrypt_GCM(pack_encoded, tag_encoded, key):
