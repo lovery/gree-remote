@@ -22,14 +22,17 @@ class ScanResult:
     port = 0
     id = ''
     name = '<unknown>'
+    subUnitCnt = 0
+    subUnits = []
     encryption_type = 'ECB'
 
-    def __init__(self, ip, port, id, name='', encryption_type='ECB'):
+    def __init__(self, ip, port, id, name='', encryption_type='ECB', subUnitCnt=0):
         self.ip = ip
         self.port = port
         self.id = id
         self.name = name
         self.encryption_type = encryption_type
+        self.subUnitCnt = subUnitCnt
 
 
 def send_data(ip, port, data):
@@ -99,8 +102,6 @@ def decrypt_GCM(pack_encoded, tag_encoded, key):
     decryptedPack = cipher.decrypt_and_verify(base64decodedPack, base64decodedTag)
     decodedPack = decryptedPack.replace(b'\xff', b'').decode('utf-8')
     return decodedPack
-
-
 
 
 def encrypt_GCM(pack, key):
@@ -187,34 +188,17 @@ def search_devices():
                     print('Set GCM encryption because version in search responce is 2 or later')
                     encryption_type = 'GCM';
 
-            if 'subCnt' in pack:
-                print('There are individual sub units - trying to get their mac/cid and keys')
+            results.append(ScanResult(
+                address[0],
+                address[1],
+                cid,
+                pack['name'] if 'name' in pack else '<unknown>',
+                encryption_type,
+                pack['subCnt'] if 'subCnt' in pack else 0
+            ))
 
-                subList_pack = '{"mac":"%s"}' % cid
-                subList_pack_encrypted = encrypt_generic(subList_pack, encryption_type)
-
-                subList_res = send_data(address[0], address[1], bytes(create_request(cid, subList_pack_encrypted, 1, 'subList'), encoding='utf-8'))
-                subList_resp = json.loads(subList_res)
-
-                print(f'SubList responce is {subList_resp}')
-
-                if 'list' in subList_resp:
-                    print(f'There is list property in the responce of subList request: {subList_resp["list"]}')
-                    for sub_unit in subList_resp['list']:
-                        print(f'in loop of list with itm {sub_unit}')
-                        if 'mac' in sub_unit:
-                            print(f'mac proprty present {sub_unit["mac"]}')
-                            results.append(ScanResult(address[0], address[1], sub_unit['mac'], sub_unit['mac'], encryption_type))
-                        else:
-                            print('missing mac property')
-                else:
-                    print('There isnt a list proprty in the responce of subList request')
-
-            else :
-                results.append(ScanResult(address[0], address[1], cid, pack['name'] if 'name' in pack else '<unknown>', encryption_type))
-
-                if args.verbose:
-                    print(f'search_devices: pack={pack}')
+            if args.verbose:
+                print(f'search_devices: pack={pack}')
 
         except socket.timeout:
             print(f'Search finished, found {len(results)} device(s)')
@@ -257,14 +241,48 @@ def bind_device(search_result):
             key = bind_resp['key']
             print(f'Bind to {search_result.id} succeeded, key = {key}')
 
+    if search_result.subUnitCnt > 0:
+        if args.verbose:
+            print(f'Device {search_result.id}, has {search_result.subUnitCnt} sub units try to retrive their mac addressess')
+        getSubUnitData(search_result)
 
+
+def getSubUnitData(device):
+    subList_pack = '{"mac":"%s"}' % device.id
+    subList_pack_encrypted = encrypt_generic(subList_pack, search_result.encryption_type)
+
+    subList_res = send_data(device.ip, 7000, bytes(create_request(device.id, subList_pack_encrypted, 1, 'subList'), encoding='utf-8'))
+    subList_resp = json.loads(subList_res)
+
+    if args.verbose:
+        print(f'SubList responce is {subList_resp}')
+
+    if 'list' in subList_resp:
+        if args.verbose:
+            print(f'There is list property in the responce of subList request: {subList_resp["list"]}')
+
+        for sub_unit in subList_resp['list']:
+            if args.verbose:
+                print(f'in loop of list with itm {sub_unit}')
+
+            if 'mac' in sub_unit:
+                if args.verbose:
+                    print(f'mac proprty present {sub_unit["mac"]}')
+                device.subUnits.append(sub_unit['mac'])
+            else:
+                print('missing mac property')
+    else:
+        if args.verbose:
+            print('There isnt a list proprty in the responce of subList request')
+
+    
 def get_param():
     global ENCRYPTION_TYPE
     print(f'Getting parameters: {", ".join(args.params)}')
 
     cols = ','.join(f'"{i}"' for i in args.params)
 
-    pack = f'{{"cols":[{cols}],"mac":"{args.id}","t":"status"}}'
+    pack = f'{{"cols":[{cols}],"mac":"{args.sub if args.sub else args.id}","t":"status"}}'
     data_encrypted = encrypt(pack, args.key, ENCRYPTION_TYPE)
     request = create_request(args.id, data_encrypted, 0)
     result = send_data(args.client, 7000, bytes(request, encoding='utf-8'))
@@ -299,7 +317,13 @@ def set_param():
     opts = ','.join(f'"{i[0]}"' for i in kv_list)
     ps = ','.join(i[1] for i in kv_list)
 
-    pack = f'{{"opt":[{opts}],"p":[{ps}],"t":"cmd"}}'
+    pack = f'{{"opt":[{opts}],"p":[{ps}],"t":"cmd"'
+
+    if args.sub is None:
+        pack += '}}'
+    else:
+        pack += ',"sub":"{args.sub}"}}'
+
     print(pack)
 
     data_encrypted = encrypt(pack, args.key, ENCRYPTION_TYPE)
@@ -333,6 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--port', help='Port of the client device, default 7000')
     parser.add_argument('-b', '--broadcast', help='Broadcast IP address of the network the devices connecting to')
     parser.add_argument('-i', '--id', help='Unique ID of the device (mac address)')
+    parser.add_argument('-s', '--sub', help='Unique ID of a sub unit device (mac address)')
     parser.add_argument('-k', '--key', help='Unique encryption key of the device')
     parser.add_argument('-e', '--encryption', help='Set the encryption type AES128 used: ECB(default), GCM')
     parser.add_argument('--verbose', help='Enable verbose logging', action='store_true')
