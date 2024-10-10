@@ -193,7 +193,7 @@ def search_devices():
                 subList_pack = '{"mac":"%s"}' % cid
                 subList_pack_encrypted = encrypt_generic(subList_pack, encryption_type)
 
-                subList_res = send_data(address[0], address[1], bytes(create_request(cid, encrypted_pack, 1, 'subList'), encoding='utf-8'))
+                subList_res = send_data(address[0], address[1], bytes(create_request(cid, subList_pack_encrypted, 1, 'subList'), encoding='utf-8'))
                 subList_resp = json.loads(subList_res)
 
                 print(f'SubList responce is {subList_resp}')
