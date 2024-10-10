@@ -328,8 +328,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_help = True
-    parser.add_argument('command', help='You can use the following commands: search, get, set')
+    parser.add_argument('command', help='You can use the following commands: search, bind, get, set')
     parser.add_argument('-c', '--client', help='IP address of the client device')
+    parser.add_argument('-p', '--port', help='Port of the client device, default 7000')
     parser.add_argument('-b', '--broadcast', help='Broadcast IP address of the network the devices connecting to')
     parser.add_argument('-i', '--id', help='Unique ID of the device (mac address)')
     parser.add_argument('-k', '--key', help='Unique encryption key of the device')
@@ -352,6 +353,12 @@ if __name__ == '__main__':
             print('Error: search command requires a broadcast IP address')
             exit(1)
         search_devices()
+    elif command == 'bind':
+        if args.params is None or args.client is None or args.id is None:
+            print('Error: bind command requires a client IP (-c) and a device ID (-i), optional port (-p) and encryption type (-e)')
+            exit(1)
+        device = ScanResult(args.client, (args.port if args.port else "7000"), args.id, '<unknown>', (args.encryption if args.encryption else 'ECB')) 
+        bind_device(device)
     elif command == 'get':
         if args.params is None or len(args.params) == 0 or args.client is None or args.id is None or args.key is None:
             print('Error: get command requires a parameter name, a client IP (-c), a device ID (-i) and a device key '
