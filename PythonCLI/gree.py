@@ -249,7 +249,7 @@ def bind_device(search_result):
 
 def getSubUnitData(device):
     subList_pack = '{"mac":"%s"}' % device.id
-    subList_pack_encrypted = encrypt_generic(subList_pack, search_result.encryption_type)
+    subList_pack_encrypted = encrypt_generic(subList_pack, device.encryption_type)
 
     subList_res = send_data(device.ip, 7000, bytes(create_request(device.id, subList_pack_encrypted, 1, 'subList'), encoding='utf-8'))
     subList_resp = json.loads(subList_res)
@@ -320,9 +320,9 @@ def set_param():
     pack = f'{{"opt":[{opts}],"p":[{ps}],"t":"cmd"'
 
     if args.sub is None:
-        pack += '}}'
+        pack += '}'
     else:
-        pack += ',"sub":"{args.sub}"}}'
+        pack += f',"sub":"{args.sub}"}}'
 
     print(pack)
 
