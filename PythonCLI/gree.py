@@ -2,12 +2,12 @@ import argparse
 import base64
 import sys
 import re
+import json
+import socket
 
 from Crypto.Cipher import AES
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-import json
-import socket
 
 
 GENERIC_KEY = "a3K8Bx%2r8Y7#xDh"
@@ -22,17 +22,19 @@ class ScanResult:
     port = 0
     id = ''
     name = '<unknown>'
-    subUnitCnt = 0
-    subUnits = []
+    key = ''
+    sub_unit_cnt = 0
+    sub_units = []
     encryption_type = 'ECB'
 
-    def __init__(self, ip, port, id, name='', encryption_type='ECB', subUnitCnt=0):
+    def __init__(self, ip, port, id, name='', encryption_type='ECB', sub_unit_cnt=0, key=''):
         self.ip = ip
         self.port = port
         self.id = id
         self.name = name
         self.encryption_type = encryption_type
-        self.subUnitCnt = subUnitCnt
+        self.sub_unit_cnt = sub_unit_cnt
+        self.key = key
 
 
 def send_data(ip, port, data):
@@ -50,7 +52,7 @@ def send_data(ip, port, data):
 
 def create_request(tcid, pack_encrypted, i=0, t="pack"):
     request = '{"cid":"app","i":' + str(i) + ',"t":"' + t + '","uid":0,"tcid":"' + tcid + '",'
-    if (isinstance(pack_encrypted, dict)):
+    if isinstance(pack_encrypted, dict):
         request += '"tag":"' + pack_encrypted["tag"] + '","pack":"' + pack_encrypted["pack"] + '"}'
     else:
         request += '"pack":"' + pack_encrypted + '"}'
@@ -118,29 +120,29 @@ def encrypt_GCM(pack, key):
 def decrypt(resp, key, enc_type):
     if enc_type == 'GCM':
         return decrypt_GCM(resp['pack'], resp['tag'], key)
-    else:
-        return decrypt_ECB(resp['pack'], key)
+
+    return decrypt_ECB(resp['pack'], key)
 
 
 def decrypt_generic(resp, enc_type):
     if enc_type == 'GCM':
         return decrypt_GCM(resp['pack'], resp['tag'], GENERIC_GCM_KEY)
-    else:
-        return decrypt_ECB(resp['pack'], GENERIC_KEY)
+
+    return decrypt_ECB(resp['pack'], GENERIC_KEY)
 
 
 def encrypt(pack, key, enc_type):
-    if (enc_type == 'GCM'):
+    if enc_type == 'GCM':
         return encrypt_GCM(pack, key)
-    else:
-        return encrypt_ECB(pack, key)
+
+    return encrypt_ECB(pack, key)
 
 
 def encrypt_generic(pack, enc_type):
     if enc_type == 'GCM':
         return encrypt_GCM(pack, GENERIC_GCM_KEY)
-    else:
-        return encrypt_ECB(pack, GENERIC_KEY)
+
+    return encrypt_ECB(pack, GENERIC_KEY)
 
 
 def search_devices():
@@ -174,7 +176,7 @@ def search_devices():
             if 'tag' in resp:
                 encryption_type = 'GCM'
                 if args.verbose:
-                    print('Setting the encryption to GCM because tag property is present in the responce')
+                    print('Setting the encryption to GCM because tag property is present in the response')
 
             decrypted_pack = decrypt_generic(resp, encryption_type)
             pack = json.loads(decrypted_pack)
@@ -185,8 +187,8 @@ def search_devices():
             if encryption_type != 'GCM' and 'ver' in pack:
                 ver = re.search(r'(?<=V)[0-9]+(?<=.)', pack['ver'])
                 if int(ver.group(0)) >= 2:
-                    print('Set GCM encryption because version in search responce is 2 or later')
-                    encryption_type = 'GCM';
+                    print('Set GCM encryption because version in search response is 2 or later')
+                    encryption_type = 'GCM'
 
             results.append(ScanResult(
                 address[0],
@@ -210,7 +212,8 @@ def search_devices():
 
 
 def bind_device(search_result):
-    print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id}, encryption: {search_result.encryption_type})')
+    print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id}, '
+          'encryption: {search_result.encryption_type})')
 
     pack = '{"mac":"%s","t":"bind","uid":0}' % search_result.id
     pack_encrypted = encrypt_generic(pack, search_result.encryption_type)
@@ -219,7 +222,8 @@ def bind_device(search_result):
         result = send_data(search_result.ip, 7000, bytes(request, encoding='utf-8'))
     except socket.timeout:
         if args.verbose:
-            print(f'Device {search_result.ip} is not responding on bind request encryped with {search_result.encryption_type}')
+            print(f'Device {search_result.ip} is not responding on bind request encryped with '
+                  '{search_result.encryption_type}')
 
         if search_result.encryption_type != 'GCM':
             search_result.encryption_type = 'GCM'
@@ -238,46 +242,52 @@ def bind_device(search_result):
             print(f'bind_device: resp={bind_resp}')
 
         if 't' in bind_resp and bind_resp["t"].lower() == "bindok":
-            key = bind_resp['key']
-            print(f'Bind to {search_result.id} succeeded, key = {key}')
+            search_result.key = bind_resp['key']
+            print(f'Bind to {search_result.id} succeeded, key = {search_result.key}')
 
-    if search_result.subUnitCnt > 0:
+    if search_result.sub_unit_cnt > 0:
         if args.verbose:
-            print(f'Device {search_result.id}, has {search_result.subUnitCnt} sub units try to retrive their mac addressess')
+            print(f'Device {search_result.id}, has {search_result.sub_unit_cnt} sub units try to retrive their mac '
+                  'addressess')
         getSubUnitData(search_result)
 
 
 def getSubUnitData(device):
-    subList_pack = '{"mac":"%s"}' % device.id
-    subList_pack_encrypted = encrypt_generic(subList_pack, device.encryption_type)
+    sub_list_pack = '{"mac":"%s"}' % device.id
+    sub_list_pack_encrypted = encrypt(sub_list_pack, device.key, device.encryption_type)
 
-    subList_res = send_data(device.ip, 7000, bytes(create_request(device.id, subList_pack_encrypted, 1, 'subList'), encoding='utf-8'))
-    subList_resp = json.loads(subList_res)
+    sub_list_request = create_request(device.id, sub_list_pack_encrypted, 1, 'sub_list')
+    sub_list_result = send_data(device.ip, 7000, bytes(sub_list_request, encoding='utf-8'))
+    sub_list_response = json.loads(sub_list_result)
+    if args.verbose:
+        print(f'sub_list response is {sub_list_response}')
+
+    sub_list_pack_decrypted = decrypt(sub_list_response, device.key, device.encryption_type)
+    sub_list_decrypted_response = json.loads(sub_list_pack_decrypted)
 
     if args.verbose:
-        print(f'SubList responce is {subList_resp}')
+        print(f'sub_list decrypted response is {sub_list_decrypted_response}')
 
-    if 'list' in subList_resp:
+    if 'list' in sub_list_decrypted_response:
         if args.verbose:
-            print(f'There is list property in the responce of subList request: {subList_resp["list"]}')
+            print(f'There is list property in the response of sub_list request: {sub_list_decrypted_response["list"]}')
 
-        for sub_unit in subList_resp['list']:
+        for sub_unit in sub_list_decrypted_response['list']:
             if args.verbose:
                 print(f'in loop of list with itm {sub_unit}')
 
             if 'mac' in sub_unit:
                 if args.verbose:
                     print(f'mac proprty present {sub_unit["mac"]}')
-                device.subUnits.append(sub_unit['mac'])
+                device.sub_units.append(sub_unit['mac'])
             else:
                 print('missing mac property')
     else:
         if args.verbose:
-            print('There isnt a list proprty in the responce of subList request')
+            print('There isnt a list proprty in the response of sub_list request')
 
-    
+
 def get_param():
-    global ENCRYPTION_TYPE
     print(f'Getting parameters: {", ".join(args.params)}')
 
     cols = ','.join(f'"{i}"' for i in args.params)
@@ -304,13 +314,12 @@ def get_param():
 
 
 def set_param():
-    global ENCRYPTION_TYPE
     kv_list = [i.split('=') for i in args.params]
     errors = [i for i in kv_list if len(i) != 2]
 
     if len(errors) > 0:
         print(f'Invalid parameters detected: {errors}')
-        exit(1)
+        sys.exit(1)
 
     print(f'Setting parameters: {", ".join("=".join(i) for i in kv_list)}')
 
@@ -376,26 +385,28 @@ if __name__ == '__main__':
     if command == 'search':
         if args.broadcast is None:
             print('Error: search command requires a broadcast IP address')
-            exit(1)
+            sys.exit(1)
         search_devices()
     elif command == 'bind':
         if args.params is None or args.client is None or args.id is None:
-            print('Error: bind command requires a client IP (-c) and a device ID (-i), optional port (-p) and encryption type (-e)')
-            exit(1)
-        device = ScanResult(args.client, (args.port if args.port else "7000"), args.id, '<unknown>', (args.encryption if args.encryption else 'ECB')) 
-        bind_device(device)
+            print('Error: bind command requires a client IP (-c) and a device ID (-i), optional port (-p) '
+                  'and encryption type (-e)')
+            sys.exit(1)
+        d = ScanResult(args.client, (args.port if args.port else "7000"), args.id, '<unknown>',
+                            (args.encryption if args.encryption else 'ECB'))
+        bind_device(d)
     elif command == 'get':
         if args.params is None or len(args.params) == 0 or args.client is None or args.id is None or args.key is None:
             print('Error: get command requires a parameter name, a client IP (-c), a device ID (-i) and a device key '
                   '(-k)')
-            exit(1)
+            sys.exit(1)
         get_param()
     elif command == 'set':
         if args.params is None or len(args.params) == 0 or args.client is None or args.id is None or args.key is None:
             print('Error: set command requires at least one key=value pair, a client IP (-c), a device ID (-i) and a '
                   'device key (-k)')
-            exit(1)
+            sys.exit(1)
         set_param()
     else:
         print(f'Error: unknown command "{args.command}"')
-        exit(1)
+        sys.exit(1)
