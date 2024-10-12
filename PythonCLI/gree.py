@@ -213,7 +213,7 @@ def search_devices():
 
 def bind_device(search_result):
     print(f'Binding device: {search_result.ip} ({search_result.name}, ID: {search_result.id}, '
-          'encryption: {search_result.encryption_type})')
+          f'encryption: {search_result.encryption_type})')
 
     pack = '{"mac":"%s","t":"bind","uid":0}' % search_result.id
     pack_encrypted = encrypt_generic(pack, search_result.encryption_type)
@@ -223,7 +223,7 @@ def bind_device(search_result):
     except socket.timeout:
         if args.verbose:
             print(f'Device {search_result.ip} is not responding on bind request encryped with '
-                  '{search_result.encryption_type}')
+                  f'{search_result.encryption_type}')
 
         if search_result.encryption_type != 'GCM':
             search_result.encryption_type = 'GCM'
@@ -253,16 +253,22 @@ def bind_device(search_result):
 
 
 def getSubUnitData(device):
-    sub_list_pack = '{"mac":"%s"}' % device.id
+    sub_list_pack = f'{{"mac":"{device.id}"}}'
+    print(f'Pack content: {sub_list_pack}, key: {device.key}, enc: {device.encryption_type}')
     sub_list_pack_encrypted = encrypt(sub_list_pack, device.key, device.encryption_type)
+    print(f'Pack encripted: {sub_list_pack_encrypted}')
 
-    sub_list_request = create_request(device.id, sub_list_pack_encrypted, 1, 'sub_list')
+    sub_list_request = create_request(device.id, sub_list_pack_encrypted, 0, 'subList')
+    print(f'Pack full request: {sub_list_request}')
     sub_list_result = send_data(device.ip, 7000, bytes(sub_list_request, encoding='utf-8'))
+    print(f'Sub list result is: {sub_list_result}')
     sub_list_response = json.loads(sub_list_result)
+    print(f'Sub list parsed responce is: {sub_list_response}')
     if args.verbose:
         print(f'sub_list response is {sub_list_response}')
 
     sub_list_pack_decrypted = decrypt(sub_list_response, device.key, device.encryption_type)
+    print(f'Sub list pack decrypted: {sub_list_pack_decrypted}')
     sub_list_decrypted_response = json.loads(sub_list_pack_decrypted)
 
     if args.verbose:
